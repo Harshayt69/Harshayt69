@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blank Launcher</title>
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --fg: #16202e;
+    --muted: #5d6b7e;
+    --accent: #2f5bea;
+    --accent-fg: #ffffff;
+    --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f141b;
+      --fg: #e8edf4;
+      --muted: #93a0b2;
+      --accent: #6d8dff;
+      --accent-fg: #0b1020;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  main { text-align: center; max-width: 420px; }
+  h1 { font-size: 1.6rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  p { color: var(--muted); margin: 0 0 24px; line-height: 1.5; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    border: 0; border-radius: 10px; padding: 12px 22px;
+    background: var(--accent); color: var(--accent-fg);
+  }
+  button[hidden] { display: none; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+  <main>
+    <h1>Blank Launcher</h1>
+    <p id="status">Paste a link in the pop-up and it opens in a new about:blank tab.</p>
+    <button id="go" type="button" hidden>Open a link</button>
+  </main>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const goBtn = document.getElementById('go');
+  let pendingUrl = null;
+
+  function normalize(raw) {
+    let value = (raw || '').trim();
+    if (!value) return null;
+    if (!/^https?:\/\//i.test(value)) value = 'https://' + value;
+    try {
+      const u = new URL(value);
+      if (!u.hostname.includes('.') && u.hostname !== 'localhost') return null;
+      return u.href;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function fill(win, url) {
+    const doc = win.document;
+    doc.title = 'about:blank';
+    doc.body.style.margin = '0';
+    doc.body.style.background = '#fff';
+    const frame = doc.createElement('iframe');
+    frame.src = url;
+    frame.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;';
+    frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-write');
+    doc.body.appendChild(frame);
+  }
+
+  // Runs when the file opens. Browsers allow the pop-up here,
+  // but may block the new tab because no click happened yet.
+  function askOnLoad() {
+    const answer = prompt('Paste the link you want to open:', 'https://');
+    if (answer === null) {
+      statusEl.textContent = 'No link entered.';
+      goBtn.textContent = 'Open a link';
+      goBtn.hidden = false;
+      return;
+    }
+    const url = normalize(answer);
+    if (!url) {
+      alert('That is not a valid web address. Try something like https://example.com');
+      statusEl.textContent = 'That was not a valid web address.';
+      goBtn.textContent = 'Try again';
+      goBtn.hidden = false;
+      return;
+    }
+    const win = window.open('about:blank', '_blank');
+    if (win) {
+      fill(win, url);
+      statusEl.textContent = 'Opened in a new tab.';
+      goBtn.textContent = 'Open another link';
+      goBtn.hidden = false;
+    } else {
+      // Blocked without a click: one click finishes it.
+      pendingUrl = url;
+      statusEl.textContent = 'Your browser needs one click to open the tab.';
+      goBtn.textContent = 'Open it now';
+      goBtn.hidden = false;
+    }
+  }
+
+  goBtn.addEventListener('click', () => {
+    // Open the blank tab first, while the click still counts as a user action.
+    const win = window.open('about:blank', '_blank');
+    if (!win) {
+      alert('Your browser blocked the new tab. Allow pop-ups for this page and try again.');
+      return;
+    }
+    let url = pendingUrl;
+    pendingUrl = null;
+    if (!url) {
+      const answer = prompt('Paste the link you want to open:', 'https://');
+      if (answer === null) { win.close(); return; }
+      url = normalize(answer);
+      if (!url) {
+        win.close();
+        alert('That is not a valid web address. Try something like https://example.com');
+        return;
+      }
+    }
+    fill(win, url);
+    statusEl.textContent = 'Opened in a new tab.';
+    goBtn.textContent = 'Open another link';
+  });
+
+  // Let the page paint first, then show the pop-up.
+  setTimeout(askOnLoad, 150);
+</script>
+</body>
+</html>
